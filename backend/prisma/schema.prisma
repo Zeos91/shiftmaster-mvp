@@ -29,6 +29,7 @@ model User {
   name      String
   email     String   @unique
   phone     String
+  password  String?  // hashed password for authentication
   role      Role     @default(OPERATOR)
 
   // optional residence for future distance logic
