@@ -1,0 +1,139 @@
+// ============================
+// Prisma Schema - ShiftMaster MVP
+// ============================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================
+// Enums
+// ============================
+enum Role {
+  OPERATOR
+  SITE_MANAGER
+  PROJECT_MANAGER
+  COMPANY_ADMIN
+}
+
+// ============================
+// User
+// ============================
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String
+  role      Role     @default(OPERATOR)
+
+  // optional residence for future distance logic
+  residenceLocation String?
+
+  // Relations
+  shifts        Shift[]        @relation("OperatorShifts")
+  approvedShifts Shift[]       @relation("ApprovedBy")
+  managedSites  Site[]         @relation("SiteManager")
+  operatorRates OperatorRate[]
+
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// Site
+// ============================
+model Site {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+
+  managerId String
+  manager   User     @relation("SiteManager", fields: [managerId], references: [id])
+
+  cranes    Crane[]
+  shifts    Shift[]
+  siteRates SiteRate[]
+
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// Crane
+// ============================
+model Crane {
+  id          String @id @default(uuid())
+  craneNumber String
+  siteId      String
+  site        Site   @relation(fields: [siteId], references: [id])
+
+  shifts Shift[]
+
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// Shift
+// ============================
+model Shift {
+  id String @id @default(uuid())
+
+  operatorId String
+  operator   User   @relation("OperatorShifts", fields: [operatorId], references: [id])
+
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
+
+  craneId String
+  crane   Crane @relation(fields: [craneId], references: [id])
+
+  startTime DateTime?
+  endTime   DateTime?
+  hours     Decimal  @db.Decimal(4, 2)
+
+  operatorRate Decimal @db.Decimal(8, 2) // default cost
+  siteRate     Decimal @db.Decimal(8, 2) // default revenue
+
+  // Optional overrides for emergency / special cases
+  overrideOperatorRate Decimal? @db.Decimal(8, 2)
+  overrideSiteRate     Decimal? @db.Decimal(8, 2)
+
+  approved     Boolean  @default(false)
+  approvedById String?
+  approvedBy   User?    @relation("ApprovedBy", fields: [approvedById], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// OperatorRate
+// ============================
+model OperatorRate {
+  id         String   @id @default(uuid())
+  operatorId String
+  operator   User     @relation(fields: [operatorId], references: [id])
+
+  hourlyRate Decimal  @db.Decimal(8, 2)
+  validFrom  DateTime
+  validTo    DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// SiteRate
+// ============================
+model SiteRate {
+  id        String   @id @default(uuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id])
+
+  hourlyRate Decimal  @db.Decimal(8, 2)
+  validFrom  DateTime
+  validTo    DateTime?
+
+  createdAt DateTime @default(now())
+}
