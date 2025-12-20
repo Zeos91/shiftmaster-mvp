@@ -128,17 +128,12 @@ export const getShifts = async (req, res) => {
 export const approveShift = async (req, res) => {
   try {
     const { id } = req.params
-    const { approvedById } = req.body
-
-    if (!approvedById) {
-      return res.status(400).json({ error: 'approvedById is required' })
-    }
 
     const shift = await prisma.shift.update({
       where: { id },
       data: {
         approved: true,
-        approvedById
+        approvedById: req.user.id
       },
       include: {
         approvedBy: true

@@ -25,12 +25,13 @@ enum Role {
 // User
 // ============================
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  phone     String
-  password  String?  // hashed password for authentication
-  role      Role     @default(OPERATOR)
+  id              String   @id @default(uuid())
+  name            String
+  email           String   @unique
+  phone           String
+  password        String?  // hashed password for authentication
+  phoneVerified   Boolean  @default(false)
+  role            Role     @default(OPERATOR)
 
   // optional residence for future distance logic
   residenceLocation String?
@@ -136,5 +137,16 @@ model SiteRate {
   validFrom  DateTime
   validTo    DateTime?
 
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// OTP (One-Time Password for phone verification)
+// ============================
+model OTP {
+  id        String   @id @default(uuid())
+  phone     String
+  code      String   // 6-digit numeric code
+  expiresAt DateTime
   createdAt DateTime @default(now())
 }
