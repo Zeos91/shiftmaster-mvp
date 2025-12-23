@@ -30,11 +30,11 @@ const generateToken = (user) => {
 }
 
 // ============================
-// REGISTER a new user
+// REGISTER a new worker
 // ============================
 export const register = async (req, res) => {
   try {
-    const { name, email, phone, password, role } = req.body
+    const { name, email, phone, password, role, roles, certifications } = req.body
 
     // Validate required fields
     if (!name || !email || !phone || !password) {
@@ -43,26 +43,28 @@ export const register = async (req, res) => {
       })
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    // Check if worker already exists
+    const existingWorker = await prisma.worker.findUnique({
       where: { email }
     })
 
-    if (existingUser) {
-      return res.status(409).json({ error: 'User with this email already exists' })
+    if (existingWorker) {
+      return res.status(409).json({ error: 'Worker with this email already exists' })
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create user with phoneVerified = false
-    const user = await prisma.user.create({
+    // Create worker with phoneVerified = false
+    const worker = await prisma.worker.create({
       data: {
         name,
         email,
         phone,
         password: hashedPassword,
         role: role || 'OPERATOR',
+        roles: roles || ['crane_operator'],
+        certifications: certifications || [],
         phoneVerified: false
       }
     })
@@ -99,13 +101,14 @@ export const register = async (req, res) => {
     }
 
     return res.status(201).json({
-      message: 'User registered successfully. Please verify your phone with the OTP sent via SMS.',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role
+      message: 'Worker registered successfully. Please verify your phone with the OTP sent via SMS.',
+      worker: {
+        id: worker.id,
+        name: worker.name,
+        email: worker.email,
+        phone: worker.phone,
+        role: worker.role,
+        roles: worker.roles
       }
     })
   } catch (err) {
@@ -141,9 +144,14 @@ export const verifyOTP = async (req, res) => {
       return res.status(401).json({ error: 'OTP has expired' })
     }
 
-    // Find user and mark as verified
-    const user = await prisma.user.update({
-      where: { phone },
+    // Find worker by phone (phone is not a unique field) and mark as verified
+    const existingWorker = await prisma.worker.findFirst({ where: { phone } })
+    if (!existingWorker) {
+      return res.status(404).json({ error: 'Worker with this phone not found' })
+    }
+
+    const worker = await prisma.worker.update({
+      where: { id: existingWorker.id },
       data: { phoneVerified: true }
     })
 
@@ -151,16 +159,17 @@ export const verifyOTP = async (req, res) => {
     await prisma.oTP.delete({ where: { id: otpRecord.id } })
 
     // Generate JWT token
-    const token = generateToken(user)
+    const token = generateToken(worker)
 
     return res.json({
       message: 'Phone verified successfully',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role
+      worker: {
+        id: worker.id,
+        name: worker.name,
+        email: worker.email,
+        phone: worker.phone,
+        role: worker.role,
+        roles: worker.roles
       },
       token
     })
@@ -171,7 +180,7 @@ export const verifyOTP = async (req, res) => {
 }
 
 // ============================
-// LOGIN user
+// LOGIN worker
 // ============================
 export const login = async (req, res) => {
   try {
@@ -184,46 +193,47 @@ export const login = async (req, res) => {
       })
     }
 
-    // Find user
-    let user
+    // Find worker
+    let worker
     if (email) {
-      user = await prisma.user.findUnique({
+      worker = await prisma.worker.findUnique({
         where: { email }
       })
     } else {
-      user = await prisma.user.findFirst({
+      worker = await prisma.worker.findFirst({
         where: { phone }
       })
     }
 
-    if (!user) {
+    if (!worker) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
     // Check if phone is verified
-    if (!user.phoneVerified) {
+    if (!worker.phoneVerified) {
       return res.status(403).json({
         error: 'Phone not verified. Please verify your phone with OTP first.'
       })
     }
 
     // Check password
-    const passwordMatch = await bcrypt.compare(password, user.password)
+    const passwordMatch = await bcrypt.compare(password, worker.password)
 
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
     // Generate JWT token
-    const token = generateToken(user)
+    const token = generateToken(worker)
 
     return res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role
+      worker: {
+        id: worker.id,
+        name: worker.name,
+        email: worker.email,
+        phone: worker.phone,
+        role: worker.role,
+        roles: worker.roles
       },
       token
     })
@@ -234,11 +244,11 @@ export const login = async (req, res) => {
 }
 
 // ============================
-// GET current user profile (requires auth)
+// GET current worker profile (requires auth)
 // ============================
 export const getProfile = async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    const worker = await prisma.worker.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
@@ -246,17 +256,20 @@ export const getProfile = async (req, res) => {
         email: true,
         phone: true,
         role: true,
+        roles: true,
+        certifications: true,
+        availabilityStatus: true,
         phoneVerified: true,
         residenceLocation: true,
         createdAt: true
       }
     })
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' })
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' })
     }
 
-    res.json(user)
+    res.json(worker)
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Failed to fetch profile' })
@@ -274,13 +287,13 @@ export const resendOTP = async (req, res) => {
       return res.status(400).json({ error: 'Phone is required' })
     }
 
-    // Check if user exists
-    const user = await prisma.user.findFirst({
+    // Check if worker exists
+    const worker = await prisma.worker.findFirst({
       where: { phone }
     })
 
-    if (!user) {
-      return res.status(404).json({ error: 'User with this phone not found' })
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker with this phone not found' })
     }
 
     // Delete any existing OTP for this phone

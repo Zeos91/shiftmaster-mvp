@@ -6,6 +6,7 @@ import {
   deleteShift,
   updateShift
 } from '../controllers/shifts.controller.js'
+import { setOverrideEdit } from '../controllers/shifts.controller.js'
 import { verifyToken, requireRole } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -14,7 +15,11 @@ const router = express.Router()
 router.post('/', verifyToken, createShift)
 router.get('/', verifyToken, getShifts)
 router.patch('/:id', verifyToken, updateShift)
-router.delete('/:id', verifyToken, requireRole('PROJECT_MANAGER', 'COMPANY_ADMIN'), deleteShift)
+// Allow SITE_MANAGER as well for delete per permissions matrix
+// Allow operator deletes when permitted by controller logic; controller enforces approval/override rules
+router.delete('/:id', verifyToken, deleteShift)
 router.patch('/:id/approve', verifyToken, requireRole('SITE_MANAGER', 'PROJECT_MANAGER', 'COMPANY_ADMIN'), approveShift)
+// Managers can toggle overrideEdit to allow operators to edit/delete after approval
+router.patch('/:id/override-edit', verifyToken, requireRole('SITE_MANAGER', 'PROJECT_MANAGER', 'COMPANY_ADMIN'), setOverrideEdit)
 
 export default router
