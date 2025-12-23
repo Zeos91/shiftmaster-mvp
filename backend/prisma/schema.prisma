@@ -121,6 +121,10 @@ model Shift {
   date          String   // YYYY-MM-DD format for the shift date
   startTime     DateTime?
   endTime       DateTime?
+  actualStartTime DateTime?
+  actualEndTime   DateTime?
+  breakMinutes    Int?
+  totalHours      Decimal? @db.Decimal(4, 2)
   hours         Decimal  @db.Decimal(4, 2)
 
   roleRequired  JobRole  // REQUIRED: The job role for this shift

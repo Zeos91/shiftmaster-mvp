@@ -333,3 +333,153 @@ export const setOverrideEdit = async (req, res) => {
     res.status(500).json({ error: 'Failed to set overrideEdit', details: err.message })
   }
 }
+
+// ============================
+// FEED: broadcasted shifts for worker
+// ============================
+export const getFeedShifts = async (req, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' })
+
+    const worker = await prisma.worker.findUnique({ where: { id: userId } })
+    if (!worker) return res.status(404).json({ error: 'Worker not found' })
+
+    const roles = worker.roles || []
+
+    const today = new Date().toISOString().split('T')[0]
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        state: 'broadcasted',
+        date: { gte: today },
+        roleRequired: { in: roles },
+        applications: { none: { workerId: userId } }
+      },
+      include: {
+        worker: true,
+        site: true,
+        crane: true
+      },
+      orderBy: { date: 'asc' }
+    })
+
+    return res.json(shifts)
+  } catch (err) {
+    console.error('getFeedShifts error:', err)
+    return res.status(500).json({ error: 'Failed to fetch feed', details: err.message })
+  }
+}
+
+// ============================
+// MY SHIFTS: assigned / pending_approval / completed
+// ============================
+export const getMyShifts = async (req, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' })
+
+    const [assigned, pendingApproval, completed] = await Promise.all([
+      prisma.shift.findMany({
+        where: { workerId: userId, state: 'assigned' },
+        include: { worker: true, site: true, crane: true },
+        orderBy: { date: 'asc' }
+      }),
+      prisma.shift.findMany({
+        where: { workerId: userId, state: 'pending_approval' },
+        include: { worker: true, site: true, crane: true },
+        orderBy: { date: 'asc' }
+      }),
+      prisma.shift.findMany({
+        where: { workerId: userId, state: 'completed' },
+        include: { worker: true, site: true, crane: true },
+        orderBy: { date: 'desc' }
+      })
+    ])
+
+    return res.json({ assigned, pending_approval: pendingApproval, completed })
+  } catch (err) {
+    console.error('getMyShifts error:', err)
+    return res.status(500).json({ error: 'Failed to fetch my shifts', details: err.message })
+  }
+}
+
+// ============================
+// MY APPLICATIONS: applications made by the user
+// ============================
+export const getMyApplications = async (req, res) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' })
+
+    const applications = await prisma.shiftApplication.findMany({
+      where: { workerId: userId },
+      include: {
+        shift: {
+          include: { worker: true, site: true, crane: true }
+        }
+      },
+      orderBy: { appliedAt: 'desc' }
+    })
+
+    return res.json(applications)
+  } catch (err) {
+    console.error('getMyApplications error:', err)
+    return res.status(500).json({ error: 'Failed to fetch my applications', details: err.message })
+  }
+}
+
+// LOG HOURS for shift
+export const logShiftHours = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { actualStartTime, actualEndTime, breakMinutes } = req.body
+
+    const shift = await prisma.shift.findUnique({ where: { id } })
+    if (!shift) return res.status(404).json({ error: 'Shift not found' })
+
+    // Only assigned worker may log hours
+    if (shift.workerId !== req.user.id) {
+      return res.status(403).json({ error: 'Only assigned worker may log hours' })
+    }
+
+    // Only allowed after shift date
+    const today = new Date().toISOString().split('T')[0]
+    if (shift.date > today) {
+      return res.status(400).json({ error: 'Can only log hours after shift date' })
+    }
+
+    // Editable until approved
+    if (shift.approved) {
+      return res.status(403).json({ error: 'Cannot edit hours after approval' })
+    }
+
+    if (!actualStartTime || !actualEndTime) {
+      return res.status(400).json({ error: 'actualStartTime and actualEndTime are required' })
+    }
+
+    const start = new Date(actualStartTime)
+    const end = new Date(actualEndTime)
+    if (end <= start) return res.status(400).json({ error: 'actualEndTime must be after actualStartTime' })
+
+    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60)
+    const breaks = breakMinutes ? Number(breakMinutes) : 0
+    const totalHours = Math.max(0, durationHours - (breaks / 60))
+
+    const updated = await prisma.shift.update({
+      where: { id },
+      data: {
+        actualStartTime: new Date(actualStartTime),
+        actualEndTime: new Date(actualEndTime),
+        breakMinutes: breaks,
+        totalHours: totalHours
+      },
+      include: { worker: true, site: true, crane: true }
+    })
+
+    return res.json(updated)
+  } catch (err) {
+    console.error('logShiftHours error:', err)
+    return res.status(500).json({ error: 'Failed to log hours', details: err.message })
+  }
+}
