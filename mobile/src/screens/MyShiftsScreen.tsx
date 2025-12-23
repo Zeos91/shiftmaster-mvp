@@ -1,9 +1,11 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert } from 'react-native'
 import client from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
-export default function MyShiftsScreen() {
+export default function MyShiftsScreen({ navigation }) {
+  const { worker } = useAuth()
   const [data, setData] = useState({ assigned: [], pending_approval: [], completed: [] })
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'upcoming'|'pending'|'completed'>('upcoming')
@@ -28,15 +30,45 @@ export default function MyShiftsScreen() {
     return data.completed
   }
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <Text style={styles.date}>{item.date}</Text>
-      <Text style={styles.site}>{item.site?.name || 'Site'}</Text>
-      <Text>{item.roleRequired} · {item.hours}h</Text>
-      {item.equipmentId ? <Text>Equipment: {item.equipmentId}</Text> : null}
-      {item.state === 'pending_approval' ? <Text style={{color:'#b59'}}>[Pending approval]</Text> : null}
-    </View>
-  )
+  const onApprove = async (shiftId) => {
+    try {
+      await client.post(`/shifts/${shiftId}/approve`)
+      load()
+    } catch (err) {
+      Alert.alert('Approve failed', err?.response?.data?.error || err.message)
+    }
+  }
+
+  const renderItem = ({ item }) => {
+    const isManager = worker?.role === 'SITE_MANAGER' || worker?.roles?.includes('safety_officer')
+    const canLog = item.workerId === worker?.id && !item.locked
+    const statusText = item.locked ? 'Approved (locked)' : item.state === 'pending_approval' ? 'Pending Approval' : item.actualStartTime ? 'Logged (editable)' : 'Assigned'
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.date}>{item.date}</Text>
+        <Text style={styles.site}>{item.site?.name || 'Site'}</Text>
+        <Text>{item.roleRequired} · {item.hours}h</Text>
+        {item.equipmentId ? <Text>Equipment: {item.equipmentId}</Text> : null}
+        <Text style={{ marginTop: 6 }}>{statusText}</Text>
+        <View style={{ flexDirection: 'row', marginTop: 8 }}>
+          {canLog && (
+            <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('LogHours', { shiftId: item.id })}>
+              <Text style={{ color: 'white' }}>Log Hours</Text>
+            </TouchableOpacity>
+          )}
+          {isManager && !item.locked && (
+            <TouchableOpacity style={[styles.button, { marginLeft: 8 }]} onPress={() => onApprove(item.id)}>
+              <Text style={{ color: 'white' }}>Approve</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[styles.smallButton, { marginLeft: 8 }]} onPress={() => navigation.navigate('Audit', { shiftId: item.id })}>
+            <Text style={styles.smallButtonText}>Audit</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
 
   if (loading) return <ActivityIndicator style={{flex:1}} />
 

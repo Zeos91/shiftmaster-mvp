@@ -13,6 +13,7 @@ import MyShiftsScreen from '../screens/MyShiftsScreen'
 import MyApplicationsScreen from '../screens/MyApplicationsScreen'
 import LogHoursScreen from '../screens/LogHoursScreen'
 import HoursReportScreen from '../screens/HoursReportScreen'
+import AuditScreen from '../screens/AuditScreen'
 import ShiftFormScreen from '../screens/ShiftFormScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 
@@ -32,6 +33,7 @@ export default function AppNavigator() {
           <Stack.Screen name="MyApplications" component={MyApplicationsScreen} />
           <Stack.Screen name="LogHours" component={LogHoursScreen} />
           <Stack.Screen name="HoursReport" component={HoursReportScreen} />
+          <Stack.Screen name="Audit" component={AuditScreen} />
           <Stack.Screen name="ShiftForm" component={ShiftFormScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
         </Stack.Navigator>

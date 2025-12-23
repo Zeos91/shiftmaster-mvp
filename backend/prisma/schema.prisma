@@ -141,6 +141,8 @@ model Shift {
   approved      Boolean    @default(false)
   approvedById  String?
   approvedBy    Worker?    @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  locked        Boolean    @default(false)
   // When true, allows a worker to edit/delete the shift after approval
   overrideEdit  Boolean    @default(false)
 
@@ -149,6 +151,23 @@ model Shift {
 
   // Broadcast and applications relation
   applications  ShiftApplication[]
+
+  createdAt DateTime @default(now())
+}
+
+// ============================
+// Audit log for shift actions
+// ============================
+model AuditLog {
+  id        String   @id @default(uuid())
+  shiftId   String
+  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  actorId   String
+  actor     Worker   @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  action    String
+  payload   Json?
 
   createdAt DateTime @default(now())
 }
