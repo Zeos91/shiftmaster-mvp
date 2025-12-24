@@ -13,6 +13,7 @@ import MyShiftsScreen from '../screens/MyShiftsScreen'
 import MyApplicationsScreen from '../screens/MyApplicationsScreen'
 import LogHoursScreen from '../screens/LogHoursScreen'
 import HoursReportScreen from '../screens/HoursReportScreen'
+import MyReportsScreen from '../screens/MyReportsScreen'
 import AuditScreen from '../screens/AuditScreen'
 import ShiftFormScreen from '../screens/ShiftFormScreen'
 import ProfileScreen from '../screens/ProfileScreen'
@@ -31,19 +32,5 @@ export default function AppNavigator() {
           <Stack.Screen name="Feed" component={FeedScreen} />
           <Stack.Screen name="MyShifts" component={MyShiftsScreen} />
           <Stack.Screen name="MyApplications" component={MyApplicationsScreen} />
-          <Stack.Screen name="LogHours" component={LogHoursScreen} />
-          <Stack.Screen name="HoursReport" component={HoursReportScreen} />
-          <Stack.Screen name="Audit" component={AuditScreen} />
-          <Stack.Screen name="ShiftForm" component={ShiftFormScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </Stack.Navigator>
-      ) : (
-        <Stack.Navigator initialRouteName="Login">
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
-        </Stack.Navigator>
-      )}
-    </NavigationContainer>
-  )
+          <Stack.Screen name="MyReports" component={MyReportsScreen} />
 }

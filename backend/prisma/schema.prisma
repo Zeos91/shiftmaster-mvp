@@ -48,28 +48,29 @@ enum ApplicationStatus {
 // Worker
 // ============================
 model Worker {
-  id              String   @id @default(uuid())
-  name            String
-  email           String   @unique
-  phone           String
-  password        String?  // hashed password for authentication
-  phoneVerified   Boolean  @default(false)
-  role            Role     @default(OPERATOR)
+  id            String  @id @default(uuid())
+  name          String
+  email         String  @unique
+  phone         String
+  password      String? // hashed password for authentication
+  phoneVerified Boolean @default(false)
+  role          Role    @default(OPERATOR)
 
   // Worker-specific fields
-  roles           JobRole[]
-  certifications  String[]
-  availabilityStatus Boolean @default(true)
+  roles              JobRole[]
+  certifications     String[]
+  availabilityStatus Boolean   @default(true)
 
   // optional residence for future distance logic
   residenceLocation String?
 
   // Relations
-  shifts        Shift[]        @relation("WorkerShifts")
-  approvedShifts Shift[]       @relation("ApprovedBy")
-  managedSites  Site[]         @relation("SiteManager")
-  workerRates   WorkerRate[]
-  applications  ShiftApplication[]
+  shifts         Shift[]            @relation("WorkerShifts")
+  approvedShifts Shift[]            @relation("ApprovedBy")
+  auditLogs      AuditLog[]
+  managedSites   Site[]             @relation("SiteManager")
+  workerRates    WorkerRate[]
+  applications   ShiftApplication[]
 
   createdAt DateTime @default(now())
 }
@@ -78,12 +79,12 @@ model Worker {
 // Site
 // ============================
 model Site {
-  id        String   @id @default(uuid())
-  name      String
-  address   String?
+  id      String  @id @default(uuid())
+  name    String
+  address String?
 
   managerId String
-  manager   Worker    @relation("SiteManager", fields: [managerId], references: [id])
+  manager   Worker @relation("SiteManager", fields: [managerId], references: [id])
 
   cranes    Crane[]
   shifts    Shift[]
@@ -118,17 +119,17 @@ model Shift {
   siteId String
   site   Site   @relation(fields: [siteId], references: [id])
 
-  date          String   // YYYY-MM-DD format for the shift date
-  startTime     DateTime?
-  endTime       DateTime?
+  date            String // YYYY-MM-DD format for the shift date
+  startTime       DateTime?
+  endTime         DateTime?
   actualStartTime DateTime?
   actualEndTime   DateTime?
   breakMinutes    Int?
-  totalHours      Decimal? @db.Decimal(4, 2)
-  hours         Decimal  @db.Decimal(4, 2)
+  totalHours      Decimal?  @db.Decimal(4, 2)
+  hours           Decimal   @db.Decimal(4, 2)
 
-  roleRequired  JobRole  // REQUIRED: The job role for this shift
-  equipmentId   String?  // OPTIONAL: Equipment ID (only for crane_operator or signalman)
+  roleRequired JobRole // REQUIRED: The job role for this shift
+  equipmentId  String? // OPTIONAL: Equipment ID (only for crane_operator or signalman)
 
   operatorRate Decimal @db.Decimal(8, 2) // default cost
   siteRate     Decimal @db.Decimal(8, 2) // default revenue
@@ -137,20 +138,21 @@ model Shift {
   overrideOperatorRate Decimal? @db.Decimal(8, 2)
   overrideSiteRate     Decimal? @db.Decimal(8, 2)
 
-  state         ShiftState @default(assigned) // Track shift state through workflow
-  approved      Boolean    @default(false)
-  approvedById  String?
-  approvedBy    Worker?    @relation("ApprovedBy", fields: [approvedById], references: [id])
-  approvedAt    DateTime?
-  locked        Boolean    @default(false)
+  state        ShiftState @default(assigned) // Track shift state through workflow
+  approved     Boolean    @default(false)
+  approvedById String?
+  approvedBy   Worker?    @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  locked       Boolean    @default(false)
   // When true, allows a worker to edit/delete the shift after approval
-  overrideEdit  Boolean    @default(false)
+  overrideEdit Boolean    @default(false)
 
-  craneId       String?  // DEPRECATED: kept for backward compatibility
-  crane         Crane?   @relation(fields: [craneId], references: [id])
+  craneId String? // DEPRECATED: kept for backward compatibility
+  crane   Crane?  @relation(fields: [craneId], references: [id])
 
   // Broadcast and applications relation
-  applications  ShiftApplication[]
+  applications ShiftApplication[]
+  auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
 }
@@ -159,15 +161,15 @@ model Shift {
 // Audit log for shift actions
 // ============================
 model AuditLog {
-  id        String   @id @default(uuid())
-  shiftId   String
-  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid())
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
 
-  actorId   String
-  actor     Worker   @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  actorId String
+  actor   Worker @relation(fields: [actorId], references: [id], onDelete: Cascade)
 
-  action    String
-  payload   Json?
+  action  String
+  payload Json?
 
   createdAt DateTime @default(now())
 }
@@ -176,11 +178,11 @@ model AuditLog {
 // WorkerRate
 // ============================
 model WorkerRate {
-  id       String   @id @default(uuid())
+  id       String @id @default(uuid())
   workerId String
-  worker   Worker   @relation(fields: [workerId], references: [id])
+  worker   Worker @relation(fields: [workerId], references: [id])
 
-  hourlyRate Decimal  @db.Decimal(8, 2)
+  hourlyRate Decimal   @db.Decimal(8, 2)
   validFrom  DateTime
   validTo    DateTime?
 
@@ -191,11 +193,11 @@ model WorkerRate {
 // SiteRate
 // ============================
 model SiteRate {
-  id        String   @id @default(uuid())
-  siteId    String
-  site      Site     @relation(fields: [siteId], references: [id])
+  id     String @id @default(uuid())
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
 
-  hourlyRate Decimal  @db.Decimal(8, 2)
+  hourlyRate Decimal   @db.Decimal(8, 2)
   validFrom  DateTime
   validTo    DateTime?
 
@@ -208,20 +210,21 @@ model SiteRate {
 model OTP {
   id        String   @id @default(uuid())
   phone     String
-  code      String   // 6-digit numeric code
+  code      String // 6-digit numeric code
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
+
 // ============================
 // ShiftApplication (Broadcast matching)
 // ============================
 model ShiftApplication {
-  id        String   @id @default(uuid())
-  shiftId   String
-  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid())
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
 
-  workerId  String
-  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId String
+  worker   Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
   status    ApplicationStatus @default(applied)
   appliedAt DateTime          @default(now())
