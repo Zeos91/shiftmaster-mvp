@@ -5,6 +5,7 @@ import shiftsRoutes from './routes/shifts.routes.js'
 import broadcastRoutes from './routes/broadcast.routes.js'
 import authRoutes from './routes/auth.routes.js'
 import reportsRoutes from './routes/reports.routes.js'
+import auditRoutes from './routes/audit.routes.js'
 
 const app = express()
 
@@ -34,6 +35,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/shifts', shiftsRoutes)
 app.use('/api/shifts', broadcastRoutes)
 app.use('/api/reports', reportsRoutes)
+app.use('/api/audit', auditRoutes)
 
 app.get('/', (req, res) => {
   res.send('ShiftMaster API running')

@@ -2,6 +2,7 @@ import prisma from '../prisma.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import twilio from 'twilio'
+import { logAudit } from '../utils/auditLog.js'
 
 // Initialize Twilio client (lazy load to handle missing credentials)
 let twilioClient = null
@@ -220,11 +221,38 @@ export const login = async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, worker.password)
 
     if (!passwordMatch) {
+      // Log failed login
+      await logAudit({
+        actorId: worker.id,
+        action: 'login_failed',
+        entityType: 'auth',
+        entityId: worker.id,
+        metadata: {
+          reason: 'invalid_password',
+          email: worker.email
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      })
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
     // Generate JWT token
     const token = generateToken(worker)
+
+    // Log successful login
+    await logAudit({
+      actorId: worker.id,
+      action: 'login_success',
+      entityType: 'auth',
+      entityId: worker.id,
+      metadata: {
+        email: worker.email,
+        role: worker.role
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
 
     return res.json({
       worker: {

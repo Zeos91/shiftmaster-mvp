@@ -1,6 +1,7 @@
 import prisma from '../prisma.js'
 import PDFDocument from 'pdfkit'
 import jwt from 'jsonwebtoken'
+import { logAudit } from '../utils/auditLog.js'
 
 export const exportHoursPdf = async (req, res) => {
   try {
@@ -207,6 +208,26 @@ export const exportShiftsPdf = async (req, res) => {
     })
 
     doc.moveDown().fontSize(12).font('Helvetica-Bold').text(`Total hours: ${total.toFixed(2)}`, { align: rtl ? 'right' : 'left' })
+    
+    // Log audit event for PDF generation
+    await logAudit({
+      actorId: user.id,
+      action: 'pdf_generated',
+      entityType: 'report',
+      entityId: targetWorkerId,
+      metadata: {
+        reportType: 'shifts_report',
+        workerId: targetWorkerId,
+        startDate,
+        endDate,
+        siteId: siteId || null,
+        shiftCount: shifts.length,
+        totalHours: total.toFixed(2)
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+    
     doc.end()
   } catch (err) {
     console.error('exportShiftsPdf error:', err)

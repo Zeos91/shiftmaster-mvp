@@ -1,4 +1,5 @@
 import prisma from '../prisma.js'
+import { logAudit } from '../utils/auditLog.js'
 
 // ============================
 // HELPER FUNCTIONS
@@ -98,6 +99,20 @@ export const broadcastShift = async (req, res) => {
       }
     })
 
+    // Log audit event
+    await logAudit({
+      actorId: req.user?.id,
+      action: 'shift_broadcasted',
+      entityType: 'shift',
+      entityId: id,
+      metadata: {
+        siteId: updatedShift.siteId,
+        roleRequired: updatedShift.roleRequired
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+
     // Get eligible workers for this broadcast
     const eligibleWorkers = await getEligibleWorkers(id)
 
@@ -191,6 +206,21 @@ export const applyToShift = async (req, res) => {
       }
     })
 
+    // Log audit event
+    await logAudit({
+      actorId: applicantId,
+      action: 'shift_applied',
+      entityType: 'application',
+      entityId: application.id,
+      metadata: {
+        shiftId: id,
+        workerId: applicantId,
+        workerName: worker.name
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+
     // Update shift state to 'applied' if this is the first application
     const applicationCount = await prisma.shiftApplication.count({
       where: { shiftId: id }
@@ -278,7 +308,30 @@ export const confirmWorker = async (req, res) => {
       data: { status: 'accepted' }
     })
 
+    // Log acceptance
+    await logAudit({
+      actorId: req.user?.id,
+      action: 'shift_application_accepted',
+      entityType: 'application',
+      entityId: applicationToConfirm.id,
+      metadata: {
+        shiftId: id,
+        workerId,
+        managerName: req.user?.email
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+
     // Reject all other applications
+    const rejectedApplications = await prisma.shiftApplication.findMany({
+      where: {
+        shiftId: id,
+        workerId: { not: workerId },
+        status: 'applied'
+      }
+    })
+
     await prisma.shiftApplication.updateMany({
       where: {
         shiftId: id,
@@ -287,6 +340,23 @@ export const confirmWorker = async (req, res) => {
       },
       data: { status: 'rejected' }
     })
+
+    // Log rejections
+    for (const rejectedApp of rejectedApplications) {
+      await logAudit({
+        actorId: req.user?.id,
+        action: 'shift_application_rejected',
+        entityType: 'application',
+        entityId: rejectedApp.id,
+        metadata: {
+          shiftId: id,
+          workerId: rejectedApp.workerId,
+          reason: 'Worker not selected'
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      })
+    }
 
     // Assign the shift to the worker and update state
     const updatedShift = await prisma.shift.update({

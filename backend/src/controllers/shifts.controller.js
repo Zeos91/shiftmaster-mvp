@@ -1,4 +1,5 @@
 import prisma from '../prisma.js'
+import { logAudit } from '../utils/auditLog.js'
 
 // Validation helpers
 const validateRoleRequiredField = (roleRequired) => {
@@ -123,6 +124,24 @@ export const createShift = async (req, res) => {
       }
     })
 
+    // Log audit event
+    await logAudit({
+      actorId: req.user?.id,
+      action: 'shift_created',
+      entityType: 'shift',
+      entityId: shift.id,
+      metadata: {
+        workerId,
+        siteId,
+        roleRequired,
+        hours: calculatedHours,
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date(endTime).toISOString()
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+
     return res.status(201).json(shift)
   } catch (err) {
     console.error(err)
@@ -234,6 +253,29 @@ export const updateShift = async (req, res) => {
       }
     })
 
+    // Log audit event
+    await logAudit({
+      actorId: req.user?.id,
+      action: 'shift_updated',
+      entityType: 'shift',
+      entityId: id,
+      metadata: {
+        changes: data,
+        before: {
+          state: shift.state,
+          approved: shift.approved,
+          locked: shift.locked
+        },
+        after: {
+          state: updatedShift.state,
+          approved: updatedShift.approved,
+          locked: updatedShift.locked
+        }
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+
     return res.json(updatedShift)
   } catch (err) {
     console.error(err)
@@ -328,6 +370,21 @@ export const deleteShift = async (req, res) => {
     }
 
     await prisma.shift.delete({ where: { id } })
+
+    // Log audit event
+    await logAudit({
+      actorId: req.user?.id,
+      action: 'shift_deleted',
+      entityType: 'shift',
+      entityId: id,
+      metadata: {
+        workerId: shift.workerId,
+        siteId: shift.siteId,
+        state: shift.state
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
 
     res.status(204).send()
   } catch (err) {
