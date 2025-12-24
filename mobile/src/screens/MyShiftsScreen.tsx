@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, Alert, Linking } from 'react-native'
 import client from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
@@ -39,6 +39,23 @@ export default function MyShiftsScreen({ navigation }) {
     }
   }
 
+  const shareViaWhatsApp = (shift) => {
+    const startTime = shift.startTime ? new Date(shift.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A'
+    const endTime = shift.endTime ? new Date(shift.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A'
+    
+    const message = `Shift Assignment 📢\nDate: ${shift.date}\nRole: ${shift.roleRequired}\nSite: ${shift.site?.name || 'Site'}\nTime: ${startTime} - ${endTime}\nHours: ${shift.hours}h`
+    const encodedMessage = encodeURIComponent(message)
+    const whatsappUrl = `whatsapp://send?text=${encodedMessage}`
+    
+    Linking.canOpenURL(whatsappUrl).then(supported => {
+      if (supported) {
+        return Linking.openURL(whatsappUrl)
+      } else {
+        Alert.alert('WhatsApp not installed', 'Please install WhatsApp to share this shift')
+      }
+    }).catch(err => console.error(err))
+  }
+
   const renderItem = ({ item }) => {
     const isManager = worker?.role === 'SITE_MANAGER' || worker?.roles?.includes('safety_officer')
     const canLog = item.workerId === worker?.id && !item.locked
@@ -65,6 +82,11 @@ export default function MyShiftsScreen({ navigation }) {
           <TouchableOpacity style={[styles.smallButton, { marginLeft: 8 }]} onPress={() => navigation.navigate('Audit', { shiftId: item.id })}>
             <Text style={styles.smallButtonText}>Audit</Text>
           </TouchableOpacity>
+          {item.workerId === worker?.id && (
+            <TouchableOpacity style={[styles.smallButton, { marginLeft: 8, backgroundColor: '#25D366' }]} onPress={() => shareViaWhatsApp(item)}>
+              <Text style={styles.smallButtonText}>📱 Share</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     )
