@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
-
+import RealtimeIndicator from '@/components/dashboard/RealtimeIndicator'
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
@@ -66,6 +66,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </button>
 
               <div className="flex items-center gap-4 ml-auto">
+                  <RealtimeIndicator enabled={true} />
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">{user?.name}</p>
                   <p className="text-xs text-gray-500">{user?.role.replace(/_/g, ' ')}</p>

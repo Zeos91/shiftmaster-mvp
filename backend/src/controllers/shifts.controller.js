@@ -1,5 +1,6 @@
 import prisma from '../prisma.js'
 import { logAudit } from '../utils/auditLog.js'
+import { emitDashboardEvent, DashboardEvents } from '../utils/dashboardEvents.js'
 import { createNotification } from './notifications.controller.js'
 
 // Validation helpers
@@ -143,6 +144,17 @@ export const createShift = async (req, res) => {
       userAgent: req.get('user-agent')
     })
 
+    emitDashboardEvent(DashboardEvents.SHIFT_CREATED, {
+      shiftId: shift.id,
+      workerId,
+      siteId,
+      state: shift.state,
+      date: shift.date,
+      roleRequired: shift.roleRequired,
+      operatorRate: shift.operatorRate,
+      siteRate: shift.siteRate
+    })
+
     return res.status(201).json(shift)
   } catch (err) {
     console.error(err)
@@ -276,6 +288,17 @@ export const updateShift = async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent')
     })
+
+    const completedNow = updatedShift.state === 'completed' && shift.state !== 'completed'
+    if (completedNow) {
+      emitDashboardEvent(DashboardEvents.SHIFT_COMPLETED, {
+        shiftId: id,
+        workerId: updatedShift.workerId,
+        siteId: updatedShift.siteId,
+        hours: updatedShift.totalHours ?? updatedShift.hours,
+        approved: updatedShift.approved
+      })
+    }
 
     return res.json(updatedShift)
   } catch (err) {

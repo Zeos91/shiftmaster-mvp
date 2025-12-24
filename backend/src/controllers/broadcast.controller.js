@@ -1,5 +1,6 @@
 import prisma from '../prisma.js'
 import { logAudit } from '../utils/auditLog.js'
+import { emitDashboardEvent, DashboardEvents } from '../utils/dashboardEvents.js'
 import { createNotification } from './notifications.controller.js'
 
 // ============================
@@ -130,6 +131,15 @@ export const broadcastShift = async (req, res) => {
       }
     }
 
+    emitDashboardEvent(DashboardEvents.SHIFT_BROADCASTED, {
+      shiftId: updatedShift.id,
+      siteId: updatedShift.siteId,
+      roleRequired: updatedShift.roleRequired,
+      date: updatedShift.date,
+      state: updatedShift.state,
+      eligibleWorkers: eligibleWorkers?.length || 0
+    })
+
     return res.json({
       message: 'Shift broadcasted successfully',
       shift: updatedShift,
@@ -246,6 +256,16 @@ export const applyToShift = async (req, res) => {
         data: { state: 'applied' }
       })
     }
+
+    const nextState = applicationCount === 1 ? 'applied' : shift.state
+
+    emitDashboardEvent(DashboardEvents.SHIFT_APPLIED, {
+      applicationId: application.id,
+      shiftId: id,
+      workerId: applicantId,
+      workerName: worker.name,
+      state: nextState
+    })
 
     // Notify site manager of new application
     const siteManager = await prisma.site.findUnique({
@@ -445,6 +465,13 @@ export const confirmWorker = async (req, res) => {
           }
         }
       }
+    })
+
+    emitDashboardEvent(DashboardEvents.SHIFT_CONFIRMED, {
+      shiftId: id,
+      workerId,
+      managerId: req.user?.id,
+      state: updatedShift.state
     })
 
     return res.json({

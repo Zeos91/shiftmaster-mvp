@@ -1,4 +1,5 @@
 import prisma from '../prisma.js'
+import { emitDashboardEvent, DashboardEvents } from './dashboardEvents.js'
 
 /**
  * Log an audit event. Called by controllers after critical actions.
@@ -14,7 +15,7 @@ export const logAudit = async ({
   userAgent
 }) => {
   try {
-    await prisma.auditLog.create({
+    const entry = await prisma.auditLog.create({
       data: {
         actorId,
         action,
@@ -24,6 +25,16 @@ export const logAudit = async ({
         ipAddress: ipAddress || null,
         userAgent: userAgent || null
       }
+    })
+
+    emitDashboardEvent(DashboardEvents.ACTIVITY_LOGGED, {
+      id: entry.id,
+      actorId,
+      action,
+      entityType,
+      entityId,
+      metadata: metadata || null,
+      timestamp: entry.timestamp
     })
   } catch (err) {
     console.error('Failed to log audit event:', err)
