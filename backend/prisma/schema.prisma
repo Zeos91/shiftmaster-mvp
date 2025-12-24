@@ -73,6 +73,15 @@ enum AuditEntityType {
   auth
 }
 
+enum NotificationType {
+  shift_broadcast
+  application_received
+  application_selected
+  application_rejected
+  hours_submitted
+  hours_approved
+  shift_reminder
+}
 // ============================
 // Worker
 // ============================
@@ -97,6 +106,7 @@ model Worker {
   shifts         Shift[]            @relation("WorkerShifts")
   approvedShifts Shift[]            @relation("ApprovedBy")
   auditLogs      AuditLog[]
+  notifications  Notification[]
   managedSites   Site[]             @relation("SiteManager")
   workerRates    WorkerRate[]
   applications   ShiftApplication[]
@@ -181,6 +191,7 @@ model Shift {
 
   // Broadcast and applications relation
   applications ShiftApplication[]
+  notifications Notification[]
 
   createdAt DateTime @default(now())
 }
@@ -264,4 +275,25 @@ model AuditLog {
   @@index([actorId])
   @@index([entityType, entityId])
   @@index([timestamp])
+}
+
+// ============================
+// Notification (Worker inbox)
+// ============================
+model Notification {
+  id        String @id @default(uuid())
+  workerId  String
+  worker    Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  shiftId String? // nullable for non-shift notifications
+  shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@index([workerId, createdAt])
+  @@index([workerId, isRead])
 }

@@ -1,5 +1,6 @@
 import prisma from '../prisma.js'
 import { logAudit } from '../utils/auditLog.js'
+import { createNotification } from './notifications.controller.js'
 
 // ============================
 // HELPER FUNCTIONS
@@ -116,6 +117,19 @@ export const broadcastShift = async (req, res) => {
     // Get eligible workers for this broadcast
     const eligibleWorkers = await getEligibleWorkers(id)
 
+    // Create notifications for eligible workers
+    if (eligibleWorkers && eligibleWorkers.length > 0) {
+      for (const worker of eligibleWorkers) {
+        await createNotification({
+          workerId: worker.id,
+          shiftId: id,
+          title: `New Shift Available: ${updatedShift.roleRequired}`,
+          message: `A new ${updatedShift.roleRequired} shift is available at ${updatedShift.site?.name || 'Site'} on ${updatedShift.date}`,
+          type: 'shift_broadcast'
+        })
+      }
+    }
+
     return res.json({
       message: 'Shift broadcasted successfully',
       shift: updatedShift,
@@ -230,6 +244,22 @@ export const applyToShift = async (req, res) => {
       await prisma.shift.update({
         where: { id },
         data: { state: 'applied' }
+      })
+    }
+
+    // Notify site manager of new application
+    const siteManager = await prisma.site.findUnique({
+      where: { id: shift.siteId },
+      select: { managerId: true }
+    })
+
+    if (siteManager?.managerId) {
+      await createNotification({
+        workerId: siteManager.managerId,
+        shiftId: id,
+        title: `New Application: ${worker.name}`,
+        message: `${worker.name} has applied for the ${shift.roleRequired} shift on ${shift.date}`,
+        type: 'application_received'
       })
     }
 
@@ -355,6 +385,38 @@ export const confirmWorker = async (req, res) => {
         },
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
+      })
+    }
+
+    // Get shift details for notifications
+    const shiftDetails = await prisma.shift.findUnique({
+      where: { id },
+      include: { site: { select: { name: true } } }
+    })
+
+    // Get worker name for notifications
+    const selectedWorker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { name: true }
+    })
+
+    // Notify selected worker of acceptance
+    await createNotification({
+      workerId,
+      shiftId: id,
+      title: `Application Accepted! ✅`,
+      message: `You've been selected for the ${shiftDetails.roleRequired} shift on ${shiftDetails.date} at ${shiftDetails.site?.name}`,
+      type: 'application_selected'
+    })
+
+    // Notify rejected workers
+    for (const rejectedApp of rejectedApplications) {
+      await createNotification({
+        workerId: rejectedApp.workerId,
+        shiftId: id,
+        title: `Application Update`,
+        message: `Your application for the ${shiftDetails.roleRequired} shift on ${shiftDetails.date} was not selected. Try the next one!`,
+        type: 'application_rejected'
       })
     }
 

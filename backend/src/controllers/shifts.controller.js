@@ -1,5 +1,6 @@
 import prisma from '../prisma.js'
 import { logAudit } from '../utils/auditLog.js'
+import { createNotification } from './notifications.controller.js'
 
 // Validation helpers
 const validateRoleRequiredField = (roleRequired) => {
@@ -308,7 +309,7 @@ export const approveShift = async (req, res) => {
   try {
     const { id } = req.params
 
-    const shift = await prisma.shift.findUnique({ where: { id } })
+    const shift = await prisma.shift.findUnique({ where: { id }, include: { worker: true, site: true } })
     if (!shift) return res.status(404).json({ error: 'Shift not found' })
 
     // RBAC: only site_manager user role OR a worker whose job roles include 'safety_officer'
@@ -340,14 +341,27 @@ export const approveShift = async (req, res) => {
       include: { worker: true, site: true, crane: true }
     })
 
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        shiftId: id,
-        actorId: req.user.id,
-        action: 'HOURS_APPROVED',
-        payload: { totalHours: updated.totalHours ?? updated.hours }
-      }
+    // Log audit event
+    await logAudit({
+      actorId: req.user.id,
+      action: 'shift_approved',
+      entityType: 'shift',
+      entityId: id,
+      metadata: {
+        totalHours: updated.totalHours ?? updated.hours,
+        workerId: shift.workerId
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    })
+
+    // Notify worker of hours approval
+    await createNotification({
+      workerId: shift.workerId,
+      shiftId: id,
+      title: `Hours Approved ✅`,
+      message: `Your ${(updated.totalHours ?? updated.hours).toFixed(2)} hours for the shift on ${shift.date} have been approved`,
+      type: 'hours_approved'
     })
 
     res.json(updated)
@@ -611,7 +625,7 @@ export const logShiftHours = async (req, res) => {
     const { id } = req.params
     const { actualStartTime, actualEndTime, breakMinutes } = req.body
 
-    const shift = await prisma.shift.findUnique({ where: { id } })
+    const shift = await prisma.shift.findUnique({ where: { id }, include: { site: true } })
     if (!shift) return res.status(404).json({ error: 'Shift not found' })
 
     // Only assigned worker may log hours
@@ -642,6 +656,9 @@ export const logShiftHours = async (req, res) => {
     const breaks = breakMinutes ? Number(breakMinutes) : 0
     const totalHours = Math.max(0, durationHours - (breaks / 60))
 
+    // Track if this is a first-time log or edit
+    const isEdit = shift.totalHours || shift.actualStartTime
+
     const updated = await prisma.shift.update({
       where: { id },
       data: {
@@ -653,16 +670,38 @@ export const logShiftHours = async (req, res) => {
       include: { worker: true, site: true, crane: true }
     })
 
-    // Audit: distinguish between first log and edit
-    const existingLogged = shift.totalHours || shift.actualStartTime
-    await prisma.auditLog.create({
-      data: {
-        shiftId: id,
-        actorId: req.user.id,
-        action: existingLogged ? 'HOURS_EDITED' : 'HOURS_LOGGED',
-        payload: { actualStartTime, actualEndTime, breakMinutes, totalHours }
-      }
+    // Log audit event
+    await logAudit({
+      actorId: req.user.id,
+      action: isEdit ? 'shift_updated' : 'shift_created',
+      entityType: 'shift',
+      entityId: id,
+      metadata: {
+        actualStartTime,
+        actualEndTime,
+        breakMinutes: breaks,
+        totalHours
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
     })
+
+    // Get site manager to notify
+    const siteManager = await prisma.site.findUnique({
+      where: { id: shift.siteId },
+      select: { managerId: true }
+    })
+
+    // Notify site manager of hours submission
+    if (siteManager?.managerId) {
+      await createNotification({
+        workerId: siteManager.managerId,
+        shiftId: id,
+        title: `Hours Logged: ${updated.worker?.name || 'Worker'}`,
+        message: `${totalHours.toFixed(2)} hours logged for the ${shift.roleRequired} shift on ${shift.date}`,
+        type: 'hours_submitted'
+      })
+    }
 
     return res.json(updated)
   } catch (err) {
