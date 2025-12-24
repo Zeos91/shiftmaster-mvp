@@ -9,6 +9,7 @@ import auditRoutes from './routes/audit.routes.js'
 import notificationsRoutes from './routes/notifications.routes.js'
 import dashboardRoutes from './routes/dashboard.routes.js'
 import streamRoutes from './routes/stream.routes.js'
+import analyticsRoutes from './routes/analytics.routes.js'
 
 const app = express()
 
@@ -42,12 +43,17 @@ app.use('/api/audit', auditRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/dashboard', streamRoutes)
+app.use('/api/dashboard', analyticsRoutes)
 
 app.get('/', (req, res) => {
   res.send('ShiftMaster API running')
 })
 
+export { app }
+
 const PORT = process.env.PORT || 3000
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
+}

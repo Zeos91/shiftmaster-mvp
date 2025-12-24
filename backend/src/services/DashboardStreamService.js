@@ -11,6 +11,18 @@ class DashboardStreamService {
     this.idleTimeout = 15 * 60 * 1000 // 15 minutes
     this.heartbeatIntervals = new Map()
     this.lastEventTime = new Map()
+
+    // Performance metrics
+    this.metrics = {
+      totalConnections: 0,
+      totalDisconnects: 0,
+      totalEvents: 0,
+      totalHeartbeats: 0,
+      failedHeartbeats: 0,
+      eventProcessingTimes: [],
+      maxEventProcessingTime: 0,
+      avgEventProcessingTime: 0
+    }
   }
 
   /**
@@ -24,6 +36,7 @@ class DashboardStreamService {
 
     this.clients.set(clientId, { res, userId, role, connectedAt: Date.now() })
     this.lastEventTime.set(clientId, Date.now())
+    this.metrics.totalConnections++
 
     // Set up heartbeat
     const heartbeat = setInterval(() => {
@@ -68,16 +81,20 @@ class DashboardStreamService {
 
     this.clients.delete(clientId)
     this.lastEventTime.delete(clientId)
+    this.metrics.totalDisconnects++
   }
 
   /**
    * Send SSE formatted event to all manager clients
    */
-  broadcast(eventName, data) {
+  broadcast(eventName, data, priority = 'info') {
+    const startTime = Date.now()
+
     const event = {
       id: Date.now(),
       type: eventName,
       data,
+      priority, // info, warning, critical
       timestamp: new Date().toISOString()
     }
 
@@ -91,7 +108,7 @@ class DashboardStreamService {
     for (const [clientId, client] of this.clients) {
       try {
         client.res.write(`event: ${eventName}\n`)
-        client.res.write(`data: ${JSON.stringify(data)}\n`)
+        client.res.write(`data: ${JSON.stringify({ ...data, priority })}\n`)
         client.res.write('id: ' + event.id + '\n\n')
 
         // Update last activity time for timeout reset
@@ -100,6 +117,67 @@ class DashboardStreamService {
         // Client disconnected, remove it
         this.removeClient(clientId)
       }
+    }
+
+    // Track performance
+    const processingTime = Date.now() - startTime
+    this.metrics.totalEvents++
+    this.metrics.eventProcessingTimes.push(processingTime)
+    if (this.metrics.eventProcessingTimes.length > 100) {
+      this.metrics.eventProcessingTimes.shift()
+    }
+    if (processingTime > this.metrics.maxEventProcessingTime) {
+      this.metrics.maxEventProcessingTime = processingTime
+    }
+    this.metrics.avgEventProcessingTime =
+      this.metrics.eventProcessingTimes.reduce((a, b) => a + b, 0) /
+      this.metrics.eventProcessingTimes.length
+  }
+
+  /**
+   * Send notification/alert to specific users or roles
+   */
+  sendNotification(eventName, data, options = {}) {
+    const {
+      priority = 'info',
+      targetUserIds = null,
+      targetRoles = null
+    } = options
+
+    const event = {
+      id: Date.now(),
+      type: eventName,
+      data: { ...data, priority },
+      timestamp: new Date().toISOString()
+    }
+
+    // Filter clients by target criteria
+    for (const [clientId, client] of this.clients) {
+      // Filter by user ID if specified
+      if (targetUserIds && !targetUserIds.includes(client.userId)) {
+        continue
+      }
+
+      // Filter by role if specified
+      if (targetRoles && !targetRoles.includes(client.role)) {
+        continue
+      }
+
+      try {
+        client.res.write(`event: ${eventName}\n`)
+        client.res.write(`data: ${JSON.stringify(event.data)}\n`)
+        client.res.write('id: ' + event.id + '\n\n')
+
+        this.lastEventTime.set(clientId, Date.now())
+      } catch (error) {
+        this.removeClient(clientId)
+      }
+    }
+
+    // Store in history
+    this.eventHistory.push(event)
+    if (this.eventHistory.length > this.maxHistorySize) {
+      this.eventHistory.shift()
     }
   }
 
@@ -113,8 +191,10 @@ class DashboardStreamService {
     try {
       client.res.write(':heartbeat\n\n')
       this.lastEventTime.set(clientId, Date.now())
+      this.metrics.totalHeartbeats++
     } catch (error) {
       // Client disconnected
+      this.metrics.failedHeartbeats++
       this.removeClient(clientId)
     }
   }
@@ -127,7 +207,19 @@ class DashboardStreamService {
       activeConnections: this.clients.size,
       maxConnections: this.maxClients,
       eventHistorySize: this.eventHistory.length,
-      recentEvents: this.eventHistory.slice(-10)
+      recentEvents: this.eventHistory.slice(-10),
+      performance: {
+        totalConnections: this.metrics.totalConnections,
+        totalDisconnects: this.metrics.totalDisconnects,
+        totalEvents: this.metrics.totalEvents,
+        totalHeartbeats: this.metrics.totalHeartbeats,
+        failedHeartbeats: this.metrics.failedHeartbeats,
+        heartbeatSuccessRate: this.metrics.totalHeartbeats > 0
+          ? ((this.metrics.totalHeartbeats - this.metrics.failedHeartbeats) / this.metrics.totalHeartbeats * 100).toFixed(2) + '%'
+          : '100%',
+        avgEventProcessingTime: this.metrics.avgEventProcessingTime.toFixed(2) + 'ms',
+        maxEventProcessingTime: this.metrics.maxEventProcessingTime + 'ms'
+      }
     }
   }
 

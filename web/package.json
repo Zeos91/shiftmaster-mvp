@@ -19,7 +19,10 @@
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "recharts": "^3.6.0"
+    "react-grid-layout": "^2.1.1",
+    "react-toastify": "^11.0.5",
+    "recharts": "^3.6.0",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
