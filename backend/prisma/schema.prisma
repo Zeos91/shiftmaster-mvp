@@ -12,59 +12,102 @@ generator client {
 }
 
 // ============================
-// Enums
+// Enums - FROZEN CONTRACT v1.0.0
 // ============================
-enum Role {
-  OPERATOR
-  SITE_MANAGER
-  PROJECT_MANAGER
-  COMPANY_ADMIN
+// ⚠️  These enum values are immutable and shared with:
+//    - Backend API (domain/shared/enums.ts)
+//    - Web Frontend
+//    - Mobile App
+//    - OpenAPI/Swagger
+//
+// 🔒 NEVER rename enum values
+// ✅  New values may be added
+//
+// Version: 1.0.0
+// Last Updated: 2026-01-31
+// ============================
+
+// System-level user roles for authentication and authorization
+enum UserRole {
+  worker // Regular shift worker
+  site_manager // Site manager with site-level permissions
+  safety_officer // Safety compliance officer
+  admin // System administrator with full access
 }
 
+// Specialized worker roles and certifications (workers can have multiple)
 enum JobRole {
-  crane_operator
-  safety_assistant
-  signalman
-  site_manager
-  safety_officer
-  general_worker
+  crane_operator // Licensed crane operator
+  safety_assistant // Safety support on site
+  signalman // Crane signaling/spotting
+  site_manager // On-site management role
+  safety_officer // Safety compliance officer
+  general_worker // General construction worker
 }
 
+// Shift lifecycle states with defined transitions
+// Flow: draft → broadcasted → assigned → completed
+//       Any state can transition to cancelled
 enum ShiftState {
-  assigned
-  broadcasted
-  applied
-  pending_approval
-  completed
+  draft // Created but not visible to workers
+  broadcasted // Posted and open for applications
+  assigned // Worker assigned to shift
+  completed // Work finished, awaiting approval
+  cancelled // Cancelled by manager (terminal)
 }
 
-enum ApplicationStatus {
-  applied
-  rejected
-  accepted
+// Shift classification for billing and prioritization
+enum ShiftType {
+  regular // Standard scheduled shift
+  overtime // Extended hours or weekend shift
+  emergency // Urgent unplanned shift
 }
 
+// Application workflow states
+// Flow: applied → pending → approved/rejected
+//       applied can also → withdrawn
+enum ApplicationState {
+  applied // Initial worker application
+  pending // Under manager review
+  approved // Application accepted (terminal)
+  rejected // Application declined (terminal)
+  withdrawn // Worker cancelled application (terminal)
+}
+
+// System actions logged for compliance and audit trail
 enum AuditAction {
+  // Worker actions
   worker_created
   worker_role_updated
   worker_cert_updated
+
+  // Shift lifecycle
   shift_created
   shift_updated
   shift_deleted
   shift_broadcasted
-  shift_applied
-  shift_application_rejected
-  shift_application_accepted
   shift_assigned
   shift_approved
   shift_completed
+  shift_cancelled
   shift_override_edit
+
+  // Application workflow
+  shift_applied
+  shift_application_approved
+  shift_application_rejected
+  shift_application_withdrawn
+
+  // Reporting
   pdf_generated
+
+  // Security
   login_success
   login_failed
   permissions_changed
 }
 
+// Entity types for audit log categorization
 enum AuditEntityType {
   worker
   shift
@@ -73,26 +116,29 @@ enum AuditEntityType {
   auth
 }
 
+// Push notification and alert categories
 enum NotificationType {
-  shift_broadcast
-  application_received
-  application_selected
-  application_rejected
-  hours_submitted
-  hours_approved
-  shift_reminder
+  shift_broadcasted // New shift posted
+  application_received // Manager got application
+  application_approved // Worker's application approved
+  application_rejected // Worker's application rejected
+  hours_submitted // Worker submitted hours
+  hours_approved // Manager approved hours
+  shift_reminder // Upcoming shift reminder
+  shift_cancelled // Shift was cancelled
 }
+
 // ============================
 // Worker
 // ============================
 model Worker {
-  id            String  @id @default(uuid())
+  id            String   @id @default(uuid())
   name          String
-  email         String  @unique
+  email         String   @unique
   phone         String
   password      String? // hashed password for authentication
-  phoneVerified Boolean @default(false)
-  role          Role    @default(OPERATOR)
+  phoneVerified Boolean  @default(false)
+  role          UserRole @default(worker)
 
   // Worker-specific fields
   roles              JobRole[]
@@ -178,6 +224,7 @@ model Shift {
   overrideSiteRate     Decimal? @db.Decimal(8, 2)
 
   state        ShiftState @default(assigned) // Track shift state through workflow
+  shiftType    ShiftType  @default(regular) // Shift classification for billing
   approved     Boolean    @default(false)
   approvedById String?
   approvedBy   Worker?    @relation("ApprovedBy", fields: [approvedById], references: [id])
@@ -190,7 +237,7 @@ model Shift {
   crane   Crane?  @relation(fields: [craneId], references: [id])
 
   // Broadcast and applications relation
-  applications ShiftApplication[]
+  applications  ShiftApplication[]
   notifications Notification[]
 
   createdAt DateTime @default(now())
@@ -248,29 +295,30 @@ model ShiftApplication {
   workerId String
   worker   Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
-  status    ApplicationStatus @default(applied)
-  appliedAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  status    ApplicationState @default(applied)
+  appliedAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   createdAt DateTime @default(now())
 
   @@unique([shiftId, workerId]) // Prevent duplicate applications
 }
+
 // ============================
 // AuditLog (Immutable compliance trail)
 // ============================
 model AuditLog {
-  id           String           @id @default(uuid())
-  actorId      String
-  actor        Worker           @relation(fields: [actorId], references: [id], onDelete: Cascade)
-  action       AuditAction
-  entityType   AuditEntityType
-  entityId     String
-  metadata     Json?
-  ipAddress    String?
-  userAgent    String?
-  timestamp    DateTime         @default(now())
-  createdAt    DateTime         @default(now())
+  id         String          @id @default(uuid())
+  actorId    String
+  actor      Worker          @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  action     AuditAction
+  entityType AuditEntityType
+  entityId   String
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime        @default(now())
+  createdAt  DateTime        @default(now())
 
   @@index([actorId])
   @@index([entityType, entityId])
@@ -281,9 +329,9 @@ model AuditLog {
 // Notification (Worker inbox)
 // ============================
 model Notification {
-  id        String @id @default(uuid())
-  workerId  String
-  worker    Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid())
+  workerId String
+  worker   Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
   shiftId String? // nullable for non-shift notifications
   shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
@@ -291,8 +339,8 @@ model Notification {
   title     String
   message   String
   type      NotificationType
-  isRead    Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
   @@index([workerId, createdAt])
   @@index([workerId, isRead])
